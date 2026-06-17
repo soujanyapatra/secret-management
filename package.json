@@ -1,0 +1,28 @@
+{
+  "name": "secret-management-with-sop",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "nodemon server.js",
+    "dev:frontend": "vite",
+    "build": "vite build",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@lucide/vue": "^1.20.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^10.0.3",
+    "nodemon": "^3.1.14",
+    "vite": "^5.4.11"
+  }
+}
