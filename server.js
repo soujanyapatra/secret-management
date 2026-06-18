@@ -260,7 +260,9 @@ app.get('/api/env', (req, res) => {
     encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
   }
   
-  if (fs.existsSync(keyPath)) {
+  if (isVercel || process.env.NODE_ENV === 'production') {
+    keysTxtContent = 'Disabled in production to prevent key leakage';
+  } else if (fs.existsSync(keyPath)) {
     keysTxtContent = fs.readFileSync(keyPath, 'utf8');
     // Security Best Practice: Mask the server's private key before sending it to the client.
     // The private key must remain hidden on the server.
@@ -279,11 +281,21 @@ app.get('/api/env', (req, res) => {
   });
 });
 
+// Middleware to restrict playground actions in production to prevent key exposure over the network
+function restrictInProduction(req, res, next) {
+  if (isVercel || process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      error: 'Playground execution endpoints are disabled in production for security. Private keys cannot be generated or transmitted over the network.'
+    });
+  }
+  next();
+}
+
 // Run age-keygen
 // ⚠️ WARNING: This endpoint is strictly for the interactive playground tutorial.
 // Generating private keys on demand and transmitting them to the client is insecure
 // and should never be done in a production application.
-app.post('/api/keygen', (req, res) => {
+app.post('/api/keygen', restrictInProduction, (req, res) => {
   try {
     const keygenBin = getBinaryPath('age-keygen');
     const output = execSync(`"${keygenBin}"`).toString();
@@ -305,7 +317,7 @@ app.post('/api/keygen', (req, res) => {
 });
 
 // Encrypt secrets using a public key
-app.post('/api/encrypt', (req, res) => {
+app.post('/api/encrypt', restrictInProduction, (req, res) => {
   const { publicKey, secrets } = req.body;
   if (!publicKey || !secrets) {
     return res.status(400).json({ error: 'Missing publicKey or secrets' });
@@ -325,7 +337,7 @@ app.post('/api/encrypt', (req, res) => {
 });
 
 // Decrypt secrets using a private key
-app.post('/api/decrypt', (req, res) => {
+app.post('/api/decrypt', restrictInProduction, (req, res) => {
   const { privateKey, encryptedContent } = req.body;
   if (!privateKey || !encryptedContent) {
     return res.status(400).json({ error: 'Missing privateKey or encryptedContent' });
@@ -350,7 +362,7 @@ app.post('/api/decrypt', (req, res) => {
 // ⚠️ WARNING: Allowing arbitrary users to upload private keys and encrypted configurations
 // via API endpoints is a massive remote-configuration vulnerability. This is only
 // implemented here for local tutorial/playground demonstration.
-app.post('/api/save-secrets', (req, res) => {
+app.post('/api/save-secrets', restrictInProduction, (req, res) => {
   const { privateKeyRaw, encryptedContent } = req.body;
   if (!privateKeyRaw || !encryptedContent) {
     return res.status(400).json({ error: 'Missing privateKeyRaw or encryptedContent' });
