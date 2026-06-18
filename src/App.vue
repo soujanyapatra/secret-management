@@ -496,14 +496,7 @@ grep -oP 'public key: \K.*' ~/.config/sops/age/keys.txt</pre>
         <h3>4. Decrypt at Runtime / Deployment</h3>
         <p>To run your node application with decrypted environment variables, you can decrypt them on-the-fly without saving the decrypted file to disk! This prevents writing plaintext secrets to server hard drives.</p>
         
-        <p><strong>Option A: Decryption using shell redirection</strong></p>
-        <div class="code-container">
-          <div class="code-header"><span>Shell Command</span></div>
-          <pre class="code-body"><span class="code-comment"># Load the key and run sops to feed environment directly into the process</span>
-SOPS_AGE_KEY=$(cat ~/.config/sops/age/keys.txt) sops exec-env .env.enc 'npm start'</pre>
-        </div>
-
-        <p><strong>Option B: In-Memory Decryption at Startup (as shown in this Monolith)</strong></p>
+        <p><strong>Option A: In-Memory Decryption at Startup (Backend Runtime)</strong></p>
         <p>You can write a simple startup function in Node.js to decrypt the secrets using child processes and inject them directly into <code>process.env</code>:</p>
         <div class="code-container">
           <div class="code-header"><span>server.js (Node.js decryption utility)</span></div>
@@ -524,6 +517,37 @@ SOPS_AGE_KEY=$(cat ~/.config/sops/age/keys.txt) sops exec-env .env.enc 'npm star
         <span class="code-variable">process.env</span>[match[1]] = match[2];
       }
     });
+  }
+}</pre>
+        </div>
+
+        <p><strong>Option B: Vercel Build-time Decryption Workflow (Prebuild Script)</strong></p>
+        <p>Since Vercel hosts static frontend files and serverless endpoints, you should decrypt secrets during the Vercel Build pipeline before the bundler runs. Save the private key in Vercel settings as <code>SOPS_AGE_KEY</code>, create a <code>decrypt.js</code> script, and run it in <code>prebuild</code>:</p>
+        
+        <div class="code-container">
+          <div class="code-header"><span>decrypt.js (Build-time decryption utility)</span></div>
+          <pre class="code-body"><span class="code-keyword">import</span> { execSync } <span class="code-keyword">from</span> <span class="code-string">'child_process'</span>;
+<span class="code-keyword">import</span> fs <span class="code-keyword">from</span> <span class="code-string">'fs'</span>;
+
+<span class="code-keyword">const</span> env = process.env.APP_ENVIRONMENT || <span class="code-string">'staging'</span>;
+<span class="code-keyword">const</span> ageKey = process.env.SOPS_AGE_KEY || fs.readFileSync(<span class="code-string">'keys.txt'</span>, <span class="code-string">'utf8'</span>).match(/(AGE-SECRET-KEY-1\w+)/)[0];
+
+<span class="code-comment">// Create a temp key file for SOPS to read</span>
+fs.writeFileSync(<span class="code-string">'temp_key.txt'</span>, ageKey, <span class="code-string">'utf8'</span>);
+
+execSync(<span class="code-string">`sops -d --input-type dotenv --output-type dotenv ${env}.env.enc > ${env}.env`</span>, {
+  env: { ...process.env, SOPS_AGE_KEY_FILE: <span class="code-string">'temp_key.txt'</span> }
+});
+
+fs.unlinkSync(<span class="code-string">'temp_key.txt'</span>);</pre>
+        </div>
+
+        <div class="code-container" style="margin-top: 1rem;">
+          <div class="code-header"><span>package.json (Vite Integration)</span></div>
+          <pre class="code-body">{
+  <span class="code-string">"scripts"</span>: {
+    <span class="code-string">"prebuild"</span>: <span class="code-string">"node decrypt.js"</span>,
+    <span class="code-string">"build"</span>: <span class="code-string">"vite build"</span>
   }
 }</pre>
         </div>

@@ -1,241 +1,214 @@
-# 🔐 Modern Secret Management: Securing Vue.js & Node.js Applications with Mozilla SOPS and AGE
+# 🔐 Secure Secret Management with SOPS + AGE (Vue.js + Node.js Application on Vercel)
 
-In modern web development, managing application secrets—such as database connection strings, Stripe keys, and OAuth credentials—is one of the most critical security responsibilities. 
+Modern web development demands secure handling of configuration variables and application secrets. Yet, developers frequently commit plaintext `.env` files to version control, share raw credentials over communication channels, or build secrets directly into client-side bundles.
 
-Yet, a look at active repositories reveals developers making the same common mistakes:
-* Committing plaintext `.env` files to Git.
-* Sharing plaintext secrets over Slack or Email.
-* Manually pasting environment configurations inside server terminals.
-* Prefixing sensitive database credentials with `VITE_` or `REACT_APP_` prefixes, exposing them to the client-side browser bundle.
-
-In this guide, we will demonstrate the industry-best practice for managing configuration variables: encrypting secrets using **Mozilla SOPS** and **AGE**, checking them safely into version control, and decrypting them dynamically **in-memory** at runtime in a monolithic Node.js and Vue 3 application.
+In this guide, we'll implement a production-grade, Git-safe secret management workflow using **Mozilla SOPS** and **AGE** inside a Vue 3 & Node.js application deployed to **Vercel**.
 
 ---
 
-## 🏗️ Architecture: How Secrets Flow Securely
+## 🛑 Part 1: The Problem with Plaintext `.env` Files
 
-Here is a visual map of how secrets are managed, committed, and loaded:
+Storing application secrets in raw `.env` files has major disadvantages:
+1. **Accidental Git Commits:** A single missing line in `.gitignore` can commit your database passwords or third-party keys to a public repository forever.
+2. **Untracked Secret History:** Plaintext env files are excluded from Git, meaning you have no version history or audit trail of who changed a secret or when.
+3. **Insecure Sharing:** Teams end up sharing secrets via Slack, Email, or Notion, exposing them to leaks.
+4. **Vite Bundle Exposure:** Statically building environment variables (e.g. prefixing them with `VITE_`) compiles them directly into static JS assets, exposing them to anyone inspecting the source code in their browser.
+
+---
+
+## 🛡️ Part 2: Introduction to SOPS and AGE
+
+To solve this, we use a GitOps-friendly approach:
+* **AGE (Actually Good Encryption):** A modern, simple file encryption tool with small, clean key pairs. It acts as the replacement for PGP.
+* **Mozilla SOPS (Secrets OPerationS):** An encryption tool that encrypts **only the values** inside files (JSON, YAML, ENV, etc.) while leaving the **keys in plaintext**. This allows Git diffs to remain completely readable.
+
+---
+
+## 🏗️ Part 3: The Monolith Demo Architecture
+
+Our demonstration project consists of:
+* **Frontend:** Vue 3 (Vite)
+* **Backend:** Node.js (Express)
+* **Encryption Tooling:** SOPS + AGE
+* **Deployment Platform:** Vercel
 
 ```mermaid
 graph TD
-    subgraph Local Development
-        Plain[Plaintext config: staging.env] -->|Encrypt with SOPS & AGE Public Key| EncFile[Encrypted config: staging.env.enc]
-        keys[Local keys.txt] -.->|Ignored by Git| GitIgnore[.gitignore]
-        Plain -.->|Ignored by Git| GitIgnore
+    subgraph Local Git Workspace
+        env[staging.env - Plaintext] -->|sops --encrypt| env_enc[staging.env.enc - Encrypted]
+        keys[keys.txt] -.->|gitignored| git_ignore[.gitignore]
+        env -.->|gitignored| git_ignore
     end
 
-    subgraph Git Version Control
-        EncFile -->|Safe to Commit| Git[Git Repository]
-    end
-
-    subgraph Runtime Server (Node.js)
-        Git -->|Pull Code| Server[Express Backend]
-        DashboardKey[Dashboard Env Var: SOPS_AGE_KEY] -->|Injected at boot| Server
-        Server -->|In-Memory Decryption of staging.env.enc| ProcessEnv[process.env]
-        ProcessEnv -->|Backend-only Secrets| DB[(Database / Stripe / APIs)]
-        ProcessEnv -->|Expose Safe Public Config /api/config| Browser[Vue.js Frontend]
+    subgraph Vercel Deployment
+        env_enc -->|Committed| git_repo[Git Repository]
+        git_repo -->|Trigger Build| vercel_build[Vercel Build Environment]
+        vercel_age[SOPS_AGE_KEY Environment Var] -->|Read Key| vercel_build
+        vercel_build -->|node decrypt.js| decrypted_env[staging.env]
+        decrypted_env -->|vite build| production_assets[Static Production Assets]
     end
 ```
 
 ---
 
-## 🛠️ The Cryptographic Core: SOPS and AGE
+## 💻 Part 4: Local Development Workflow
 
-### What is AGE?
-**AGE (Actually Good Encryption)** is a modern, simple, and secure file encryption tool designed to replace PGP. It avoids complex trust webs, generates simple key pairs, and provides lightning-fast performance.
-An AGE key file looks like this:
-```text
-# public key: age1m92sk02f7526v0nhwuj9pv6f0dhh2zhe6pvy9e74qct79mv60guscgml49
-AGE-SECRET-KEY-1V8KFHUL3MTRV6V0Q90DSZD87ZD0MK4M5MN7N5YLF0YKWXZUW6EESXS87HC
-```
-
-### What is Mozilla SOPS?
-**SOPS (Secrets OPerationS)** is an editor of encrypted files that supports YAML, JSON, ENV, and INI formats. Crucially:
-* SOPS encrypts **only the values** of your environment variables.
-* It leaves the **keys (variable names) in plaintext**.
-* This makes Git diffs highly readable and keeps your configuration structure visible without compromising security.
-
----
-
-## 💻 Step-by-Step Developer Workflow
-
-This repository contains a companion dashboard to guide you through the local setup:
-
-### Step 1: Generate AGE Key Pair
-Run this command in your local terminal:
+### Step 1: Generate your AGE Key Pair
+Run this command locally to generate a private and public key pair:
 ```bash
 ./bin/age-keygen -o keys.txt
 ```
-This generates `keys.txt` in your project root containing your public and private key.
+This generates `keys.txt` in your root folder (which is safely ignored by Git).
 
-### Step 2: Define your Plaintext Secrets
-Create a file named `staging.env` (already pre-created for this demo) and add your configurations:
+### Step 2: Define Plaintext Secrets
+Create a file named `staging.env` in the root:
 ```dotenv
-# Database Configuration
 DATABASE_URL=postgresql://sops_user:sops_super_secret_password_2026@localhost:5432/sops_db
-
-# Third-party integrations
 API_SECRET_KEY=sk_test_51N2xSOPSandAGEsecretKeyForVerification
-
-# Google OAuth Configuration (Public & Private keys)
 VITE_GOOGLE_AUTH_CLIENT_ID=54321-google-oauth-client-id.apps.googleusercontent.com
-GOOGLE_AUTH_CLIENT_SECRET=gsec_staging_secret_key_dont_expose_998877
-
-# Feature Toggles
 VITE_FEATURE_BETA_ACCESS=true
 ```
 
-### Step 3: Encrypt the file using SOPS
-Encrypt your environment file using the AGE public key:
+### Step 3: Run the App Locally
+The Node.js server reads the plaintext `staging.env` file during local development to boot up. Run the dev server:
 ```bash
-SOPS_AGE_KEY_FILE=keys.txt ./bin/sops --encrypt --age age1... --input-type dotenv --output-type dotenv staging.env > staging.env.enc
-```
-Your resulting `staging.env.enc` file will look like this:
-```dotenv
-DATABASE_URL=ENC[AES256_GCM,data:wOd+zC...,iv:...,tag:...]
-VITE_GOOGLE_AUTH_CLIENT_ID=ENC[AES256_GCM,data:...,iv:...,tag:...]
-```
-Since the values are fully encrypted, **it is 100% safe to commit `staging.env.enc` to Git!**
-
-### Step 4: Add Ignored Files to `.gitignore`
-Make sure plaintext credentials and keys never hit Github:
-```gitignore
-# .gitignore
-*.env
-keys.txt
-temp*.env*
+npm run dev
 ```
 
 ---
 
-## 🔒 Loading Secrets Safely in Node.js (Backend)
+## 🔄 Part 5: The Git Workflow (Encryption before commit)
 
-At startup, the server-side application decrypts the env file in-memory using the AGE private key. Here is how it works under the hood in `server.js`:
+Before checking code into version control, encrypt your secrets:
 
+```bash
+# Encrypt staging.env into staging.env.enc using your AGE public key
+SOPS_AGE_KEY_FILE=keys.txt ./bin/sops --encrypt --age age1... --input-type dotenv --output-type dotenv staging.env > staging.env.enc
+```
+
+You can now safely commit `staging.env.enc` to Git:
+```bash
+git add staging.env.enc
+git commit -m "Add encrypted staging configuration"
+git push
+```
+Your plaintext `staging.env` and `keys.txt` are excluded by `.gitignore` and never committed.
+
+---
+
+## ☁️ Part 6: Vercel Deployment
+
+Deploying on Vercel gives you two architectural choices:
+
+### Option 1: Vercel Dashboard Variables Only (Simple)
+For simple applications, store configurations directly in the Vercel dashboard:
+1. Go to **Project Settings -> Environment Variables**.
+2. Add your keys (`DATABASE_URL`, `API_SECRET_KEY`, etc.) directly.
+3. Pros: Zero setup required; Vercel handles encryption.
+4. Cons: No Git version history; harder to track changes.
+
+### Option 2: SOPS + AGE + Vercel (Recommended for Enterprise/GitOps)
+To keep secret changes versioned and tracked via Git PR reviews, decrypt them during the Vercel build step.
+
+#### Step 1: Save the AGE Private Key in Vercel
+In your Vercel Dashboard, go to **Settings -> Environment Variables** and add:
+```env
+SOPS_AGE_KEY=AGE-SECRET-KEY-1V8KFHUL3...
+```
+
+#### Step 2: Create a Decryption Script (`decrypt.js`)
+Create a build-time script to decrypt secrets during Vercel's build hook:
 ```javascript
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-function loadSopsSecrets() {
-  const env = process.env.APP_ENVIRONMENT || 'staging';
-  const encEnvPath = path.join(__dirname, `${env}.env.enc`);
-  const keyPath = path.join(__dirname, 'keys.txt');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  // Find the private key: either local keys.txt or system env (e.g. Vercel dashboard)
-  let ageKey = process.env.SOPS_AGE_KEY;
-  if (!ageKey && fs.existsSync(keyPath)) {
-    const content = fs.readFileSync(keyPath, 'utf8');
-    const match = content.match(/(AGE-SECRET-KEY-1\w+)/);
-    if (match) ageKey = match[0];
-  }
-
-  if (fs.existsSync(encEnvPath) && ageKey) {
-    try {
-      // Execute SOPS decryption in-memory
-      const decrypted = execSync(`"./bin/sops" --decrypt --input-type dotenv --output-type dotenv "${encEnvPath}"`, {
-        env: { ...process.env, SOPS_AGE_KEY: ageKey }
-      }).toString();
-
-      // Inject variables into process.env
-      const lines = decrypted.split('\n');
-      lines.forEach(line => {
-        const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-        if (match) {
-          const key = match[1];
-          let value = match[2] || '';
-          if (value.startsWith('"') && value.endsWith('"')) {
-            value = value.slice(1, -1);
-          }
-          process.env[key] = value;
-        }
-      });
-      console.log('✅ Secrets successfully loaded into memory!');
-    } catch (err) {
-      console.error('❌ Decryption failed:', err.message);
-    }
-  }
+const env = process.env.APP_ENVIRONMENT || 'staging';
+let encEnvPath = path.join(__dirname, `${env}.env.enc`);
+if (!fs.existsSync(encEnvPath)) {
+  encEnvPath = path.join(__dirname, '.env.enc');
 }
-```
+const keyPath = path.join(__dirname, 'keys.txt');
 
----
+let ageKey = process.env.SOPS_AGE_KEY;
+if (!ageKey && fs.existsSync(keyPath)) {
+  const keyContent = fs.readFileSync(keyPath, 'utf8');
+  ageKey = keyContent.match(/(AGE-SECRET-KEY-1\w+)/)[0];
+}
 
-## 🌐 Securing Vue.js (The Vite Bundle Exposure Loophole)
+if (!ageKey) {
+  console.log('⚠️ No AGE key found. Skipping build-time decryption.');
+  process.exit(0);
+}
 
-Single Page Application frameworks (Vite, Webpack, Vue, React) bakes any environment variable starting with `VITE_` or `REACT_APP_` **directly into the compiled static JS file**. If you write:
-```env
-VITE_STRIPE_SECRET_KEY=sk_live_51N2x...
-```
-Any website visitor can open Chrome DevTools, inspect the JS bundle source code, and steal your secret key!
+// Write the key to a temporary file for SOPS to read
+const tempKeyPath = path.join(__dirname, 'temp_key.txt');
+fs.writeFileSync(tempKeyPath, ageKey, 'utf8');
 
-### The Solution: Expose config dynamically via API
-1. Keep sensitive keys unprefixed (e.g. `API_SECRET_KEY`).
-2. Write a secure Node.js endpoint `/api/config` that returns only safe public variables:
-```javascript
-app.get('/api/config', (req, res) => {
-  res.json({
-    VITE_GOOGLE_AUTH_CLIENT_ID: process.env.VITE_GOOGLE_AUTH_CLIENT_ID,
-    VITE_FEATURE_BETA_ACCESS: process.env.VITE_FEATURE_BETA_ACCESS === 'true'
+try {
+  const binaryPath = path.join(__dirname, 'bin', process.platform === 'win32' ? 'sops.exe' : 'sops');
+  const destEnvPath = path.join(__dirname, `${env}.env`);
+  
+  execSync(`"${binaryPath}" --decrypt --input-type dotenv --output-type dotenv "${encEnvPath}" > "${destEnvPath}"`, {
+    env: { ...process.env, SOPS_AGE_KEY_FILE: tempKeyPath }
   });
-});
-```
-3. Fetch this endpoint at frontend startup. The sensitive database keys and Stripe secrets remain strictly inside the backend's memory, never exposing them to the network tab.
-
----
-
-## 🚀 CI/CD Integration (GitHub Actions & Jenkins)
-
-For automated deployments, store your private key as a secret on your deployment platform:
-
-### 1. GitHub Actions Workflow
-```yaml
-name: Deploy Application
-on: [push]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Build and Deploy
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-        run: |
-          # Node serverless launcher automatically picks up SOPS_AGE_KEY from the runtime environment!
-          npm install
-          npm run build
-          npm run start
-```
-
-### 2. Jenkins Pipeline
-```groovy
-stage('Deploy') {
-    steps {
-        withCredentials([string(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY')]) {
-            sh '''
-            # Run build script
-            npm install
-            npm run build
-            '''
-        }
-    }
+  console.log(`✅ Decrypted secrets to ${env}.env`);
+} finally {
+  if (fs.existsSync(tempKeyPath)) {
+    fs.unlinkSync(tempKeyPath);
+  }
 }
 ```
 
+#### Step 3: Trigger in `package.json`
+Add a `prebuild` hook to decrypt secrets before Vite builds:
+```json
+{
+  "scripts": {
+    "prebuild": "node decrypt.js",
+    "build": "vite build"
+  }
+}
+```
+When Vercel builds the project, it executes:
+`prebuild` (decrypts `.env.enc` to `.env`) ➔ `build` (Vite compiles static assets with the decrypted configurations) ➔ Deploy.
+
 ---
 
-## 📝 Security Best Practices Cheat Sheet
+## 🔄 Part 7: Secret Rotation Workflow
 
-### Do:
-* ✅ Encrypt environment files before committing to version control.
-* ✅ Keep environment files separated (e.g., `dev.env.enc`, `staging.env.enc`, `prod.env.enc`).
-* ✅ Put `keys.txt` and `*.env` files in your `.gitignore`.
-* ✅ Decrypt files in-memory at runtime to prevent writing plain text keys to disk in production.
-* ✅ Store the production AGE private key inside secure dashboards (Vercel, AWS Secrets Manager, GitHub Secrets).
+When you need to rotate a secret (e.g., updating database credentials):
+1. Decrypt your local file:
+   ```bash
+   SOPS_AGE_KEY_FILE=keys.txt ./bin/sops --decrypt staging.env.enc > staging.env
+   ```
+2. Update the values inside `staging.env`.
+3. Encrypt the file again:
+   ```bash
+   SOPS_AGE_KEY_FILE=keys.txt ./bin/sops --encrypt --age age1... --input-type dotenv --output-type dotenv staging.env > staging.env.enc
+   ```
+4. Commit `staging.env.enc` and push. The CI/CD pipeline immediately builds and deploys with the new secrets.
 
-### Don't:
-* ❌ Commit raw private key files (`keys.txt`) to Git.
-* ❌ Prefix private backend keys with `VITE_` or `REACT_APP_`.
-* ❌ Transmit private keys or decrypted payloads over API endpoints.
-* ❌ Store production private keys in the code repository.
+---
+
+## 📊 Part 8: Comparison Matrix
+
+| Method | Git-Safe | Setup Complexity | Cost | Version Control History |
+| :--- | :--- | :--- | :--- | :--- |
+| **Plaintext `.env`** | ❌ No | ✅ Extremely Easy | Free | ❌ None |
+| **Vercel Dashboard Env** | ✅ Yes | ✅ Easy | Free | ❌ None |
+| **SOPS + AGE** | ✅ Yes | 🟡 Medium | Free | ✅ Full Version Control |
+| **HashiCorp Vault** | ✅ Yes | ❌ Hard | Paid | ✅ Full Audit Trail |
+| **AWS Secrets Manager** | ✅ Yes | 🟡 Medium | Paid | ✅ Full Audit Trail |
+
+---
+
+## 🏢 Part 9: Enterprise Recommendations
+
+* **Small Projects / Solo Developers:** Use Vercel Dashboard Environment Variables.
+* **Growing Teams (2-50 developers):** Use **SOPS + AGE**. It ensures configuration structures are tracked in pull requests, and allows team members to decrypt secrets locally without sharing plaintext credentials over chat.
+* **Large Enterprise / Compliance-restricted:** Use **HashiCorp Vault** or **AWS Secrets Manager** to support fine-grained authorization policies and dynamic secret generation.
