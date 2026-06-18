@@ -267,6 +267,11 @@ app.get('/api/env', (req, res) => {
   
   res.json({
     env: envData,
+    isVercel,
+    isProduction: process.env.NODE_ENV === 'production' || isVercel,
+    decryptStatus: process.env.SOPS_DECRYPT_STATUS || 'MISSING_KEY',
+    decryptMethod: process.env.SOPS_DECRYPT_METHOD || 'None',
+    decryptError: process.env.SOPS_DECRYPT_ERROR || null,
     files: {
       keysTxtStatus,
       keysTxtPublicKey,

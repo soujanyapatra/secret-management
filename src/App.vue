@@ -55,12 +55,15 @@
                 <pre class="code-body">./bin/age-keygen -o keys.txt</pre>
               </div>
 
-              <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="serverEnv.files.keysTxtStatus === 'Detected' ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
-                <CheckCircle v-if="serverEnv.files.keysTxtStatus === 'Detected'" style="color: #22c55e;" />
+              <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="(serverEnv.files.keysTxtStatus === 'Detected' || (serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS')) ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
+                <CheckCircle v-if="serverEnv.files.keysTxtStatus === 'Detected' || (serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS')" style="color: #22c55e;" />
                 <AlertCircle v-else style="color: #eab308;" />
                 <div style="flex-grow: 1;">
                   <span v-if="serverEnv.files.keysTxtStatus === 'Detected'" style="color: #22c55e; font-weight: 500;">
                     ✅ keys.txt detected in project root! (Public Key: <code>{{ serverEnv.files.keysTxtPublicKey }}</code>)
+                  </span>
+                  <span v-else-if="serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS'" style="color: #22c55e; font-weight: 500;">
+                    ✅ Private key active via environment variable (Production mode)
                   </span>
                   <span v-else style="color: #eab308; font-weight: 500;">
                     ⏳ Waiting for you to run the keygen command in your local terminal...
@@ -73,8 +76,7 @@
             </div>
           </section>
 
-          <!-- Step 2: Define Plaintext Secrets -->
-          <section class="glass-card step-card" :class="{ 'step-active': currentStep === 2, 'step-disabled': serverEnv.files.keysTxtStatus === 'Missing' }">
+          <section class="glass-card step-card" :class="{ 'step-active': currentStep === 2, 'step-disabled': serverEnv.files.keysTxtStatus === 'Missing' && !serverEnv.isProduction }">
             <div class="step-num">2</div>
             <div class="step-content">
               <h3>Define Plaintext Configurations</h3>
@@ -101,12 +103,15 @@ GOOGLE_AUTH_CLIENT_SECRET=gsec_staging_secret_key_dont_expose_998877
 VITE_FEATURE_BETA_ACCESS=true</pre>
               </div>
 
-              <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="serverEnv.files.plaintextEnvStatus === 'Detected' ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
-                <CheckCircle v-if="serverEnv.files.plaintextEnvStatus === 'Detected'" style="color: #22c55e;" />
+              <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="(serverEnv.files.plaintextEnvStatus === 'Detected' || (serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS')) ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
+                <CheckCircle v-if="serverEnv.files.plaintextEnvStatus === 'Detected' || (serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS')" style="color: #22c55e;" />
                 <AlertCircle v-else style="color: #eab308;" />
                 <div style="flex-grow: 1;">
                   <span v-if="serverEnv.files.plaintextEnvStatus === 'Detected'" style="color: #22c55e; font-weight: 500;">
                     ✅ Plaintext staging.env file detected on server!
+                  </span>
+                  <span v-else-if="serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS'" style="color: #22c55e; font-weight: 500;">
+                    ✅ Plaintext bypassed in production (Secrets are secured using SOPS)
                   </span>
                   <span v-else style="color: #eab308; font-weight: 500;">
                     ⏳ Waiting for staging.env to be created...
@@ -120,7 +125,7 @@ VITE_FEATURE_BETA_ACCESS=true</pre>
           </section>
 
           <!-- Step 3: Encrypt with SOPS -->
-          <section class="glass-card step-card" :class="{ 'step-active': currentStep === 3, 'step-disabled': currentStep < 3 }">
+          <section class="glass-card step-card" :class="{ 'step-active': currentStep === 3, 'step-disabled': currentStep < 3 && !serverEnv.isProduction }">
             <div class="step-num">3</div>
             <div class="step-content">
               <h3>Encrypt Secrets with SOPS (Local Terminal)</h3>
@@ -136,12 +141,15 @@ VITE_FEATURE_BETA_ACCESS=true</pre>
                 <pre class="code-body" style="font-size: 0.75rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">SOPS_AGE_KEY_FILE=keys.txt ./bin/sops --encrypt --age {{ serverEnv.files.keysTxtPublicKey !== 'None' ? serverEnv.files.keysTxtPublicKey : '&lt;public_key&gt;' }} --input-type dotenv --output-type dotenv staging.env > staging.env.enc</pre>
               </div>
 
-              <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="serverEnv.files.envEnc && !serverEnv.files.envEnc.includes('not found') ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
-                <CheckCircle v-if="serverEnv.files.envEnc && !serverEnv.files.envEnc.includes('not found')" style="color: #22c55e;" />
+              <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="((serverEnv.files.envEnc && !serverEnv.files.envEnc.includes('not found')) || (serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS')) ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
+                <CheckCircle v-if="(serverEnv.files.envEnc && !serverEnv.files.envEnc.includes('not found')) || (serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS')" style="color: #22c55e;" />
                 <AlertCircle v-else style="color: #eab308;" />
                 <div style="flex-grow: 1;">
                   <span v-if="serverEnv.files.envEnc && !serverEnv.files.envEnc.includes('not found')" style="color: #22c55e; font-weight: 500;">
                     ✅ Encrypted file staging.env.enc detected!
+                  </span>
+                  <span v-else-if="serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS'" style="color: #22c55e; font-weight: 500;">
+                    ✅ Encrypted secrets successfully loaded in production
                   </span>
                   <span v-else style="color: #eab308; font-weight: 500;">
                     ⏳ Waiting for staging.env.enc to be generated...
@@ -155,24 +163,24 @@ VITE_FEATURE_BETA_ACCESS=true</pre>
           </section>
 
           <!-- Step 4: Apply to Server & Decrypt -->
-          <section class="glass-card step-card" :class="{ 'step-active': currentStep === 4, 'step-disabled': !serverEnv.files.envEnc || serverEnv.files.envEnc.includes('not found') }">
+          <section class="glass-card step-card" :class="{ 'step-active': currentStep === 4, 'step-disabled': (!serverEnv.files.envEnc || serverEnv.files.envEnc.includes('not found')) && !serverEnv.isProduction }">
             <div class="step-num">4</div>
             <div class="step-content">
               <h3>Deploy & Decrypt (Runtime Simulation)</h3>
               <p class="step-desc">Simulate starting or reloading your application backend. The Express server will read the encrypted <code>staging.env.enc</code> and the private key from the local disk, decrypting them in-memory. <strong>No private keys are sent or shared over the network!</strong></p>
               
               <div class="btn-group" style="margin-bottom: 1rem;">
-                <button class="btn btn-primary" @click="reloadServerEnv" :disabled="loading.reload || (serverEnv.files.envEnc && serverEnv.files.envEnc.includes('not found'))" id="btn-reload-env">
+                <button class="btn btn-primary" @click="reloadServerEnv" :disabled="loading.reload || ((serverEnv.files.envEnc && serverEnv.files.envEnc.includes('not found')) && !serverEnv.isProduction)" id="btn-reload-env">
                   <RefreshCw v-if="loading.reload" class="spin-icon" />
                   <Unlock v-else /> Reload & Decrypt In-Memory
                 </button>
               </div>
 
-              <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="serverEnv.env.SOPS_DECRYPT_STATUS === 'SUCCESS' ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
-                <CheckCircle v-slot:default v-if="serverEnv.env.SOPS_DECRYPT_STATUS === 'SUCCESS'" style="color: #22c55e;" />
+              <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="(serverEnv.env.SOPS_DECRYPT_STATUS === 'SUCCESS' || serverEnv.decryptStatus === 'SUCCESS') ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
+                <CheckCircle v-if="serverEnv.env.SOPS_DECRYPT_STATUS === 'SUCCESS' || serverEnv.decryptStatus === 'SUCCESS'" style="color: #22c55e;" />
                 <AlertCircle v-else style="color: #eab308;" />
                 <div style="flex-grow: 1;">
-                  <span v-if="serverEnv.env.SOPS_DECRYPT_STATUS === 'SUCCESS'" style="color: #22c55e; font-weight: 500;">
+                  <span v-if="serverEnv.env.SOPS_DECRYPT_STATUS === 'SUCCESS' || serverEnv.decryptStatus === 'SUCCESS'" style="color: #22c55e; font-weight: 500;">
                     ✅ Secrets successfully decrypted and loaded into Node.js memory!
                   </span>
                   <span v-else style="color: #eab308; font-weight: 500;">
@@ -708,7 +716,9 @@ const fetchServerEnv = async () => {
       serverEnv.value = data;
       
       // Auto-calculate step based on filesystem status to make guide interactive
-      if (serverEnv.value.files.keysTxtStatus === 'Detected') {
+      if (serverEnv.value.isProduction && (serverEnv.value.decryptStatus === 'SUCCESS' || serverEnv.value.env.SOPS_DECRYPT_STATUS === 'SUCCESS')) {
+        currentStep.value = 4;
+      } else if (serverEnv.value.files.keysTxtStatus === 'Detected') {
         if (serverEnv.value.files.plaintextEnvStatus === 'Detected') {
           if (serverEnv.value.files.envEnc && !serverEnv.value.files.envEnc.includes('not found')) {
             currentStep.value = 4;
