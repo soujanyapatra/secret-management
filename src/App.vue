@@ -336,7 +336,7 @@
               </div>
 
               <!-- Beta Feature Flag Toggle -->
-              <div v-slot:default v-if="publicConfig.VITE_FEATURE_BETA_ACCESS" class="beta-widget" style="padding: 1rem; border-radius: 6px; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.2); display: flex; align-items: center; gap: 0.75rem;">
+              <div v-if="publicConfig.VITE_FEATURE_BETA_ACCESS" class="beta-widget" style="padding: 1rem; border-radius: 6px; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.2); display: flex; align-items: center; gap: 0.75rem;">
                 <div style="background: var(--accent); color: black; font-size: 0.7rem; font-weight: bold; padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; line-height: 1.2;">Beta</div>
                 <div style="text-align: left;">
                   <h5 style="color: var(--accent); font-size: 0.9rem; margin: 0 0 0.1rem 0;">Staging Environment Beta Access</h5>
@@ -385,10 +385,8 @@
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
-
         </div>
       </div>
     </div>
