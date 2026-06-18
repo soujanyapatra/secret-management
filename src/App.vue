@@ -299,6 +299,98 @@
           </div>
         </div>
       </div>
+
+      <!-- DYNAMIC CONFIGURATION DEMO -->
+      <div class="glass-card dynamic-demo-section" style="margin-top: 2rem;">
+        <div class="vulnerability-header">
+          <Layers class="vulnerability-icon success" />
+          <h3>Dynamic Frontend Features Demo (Environment-driven)</h3>
+        </div>
+        <p class="section-desc">
+          To illustrate how your frontend securely consumes environment configurations at runtime: below is a live simulation. 
+          The backend decrypts the secrets (like <code>GOOGLE_AUTH_CLIENT_ID</code> and <code>FEATURE_BETA_ACCESS</code>) from <code>.env.enc</code> (or <code>staging.env.enc</code>) and exposes <strong>only the public properties</strong> to the frontend via the <code>/api/config</code> API endpoint. The sensitive <strong>Client Secret</strong> and database password remain safely hidden on the server!
+        </p>
+
+        <div class="demo-playground-grid" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 1.5rem; margin-top: 1.5rem;">
+          
+          <!-- LEFT SIDE: FRONTEND UI ADAPTATION -->
+          <div class="demo-panel fe-render">
+            <h4 style="margin-bottom: 1rem; color: var(--primary); display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem;">
+              <ShieldCheck size="18" /> Frontend UI Rendering (Safe Client View)
+            </h4>
+            <div class="fe-canvas" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; min-height: 200px; justify-content: center;">
+              
+              <!-- Client ID Integration -->
+              <div v-if="publicConfig.GOOGLE_AUTH_CLIENT_ID && publicConfig.GOOGLE_AUTH_CLIENT_ID !== 'mock-client-id-not-loaded'" class="google-auth-widget" style="padding: 1rem; border-radius: 6px; background: rgba(66, 133, 244, 0.1); border: 1px solid rgba(66, 133, 244, 0.2);">
+                <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #4285F4; font-weight: bold; display: block; margin-bottom: 0.5rem;">Google Authentication Integration</span>
+                <button class="btn" style="background: #4285F4; color: white; display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; padding: 0.5rem 1rem; border-radius: 4px; border: none; cursor: pointer; font-weight: 500;">
+                  <svg style="width:16px;height:16px" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12v2.7h5.38C17.1,14.93,15.89,16.5,13.85,17.58v2.28h3.9c2.28-2.1,3.6-5.2,3.6-8.76C21.35,11.1,21.35,11.1,21.35,11.1z M12,21.6c2.59,0,4.76-0.86,6.35-2.34l-3.9-2.28c-1.08,0.72-2.47,1.15-4.45,1.15c-3.42,0-6.32-2.3-7.36-5.4H2.43v2.38C4.02,18.3,7.74,21.6,12,21.6z M4.64,12.72c-0.27-0.81-0.42-1.68-0.42-2.58s0.15-1.77,0.42-2.58V5.18H2.43C1.65,6.73,1.2,8.47,1.2,10.3s0.45,3.57,1.23,5.12L4.64,12.72z M12,7.2c1.78,0,3.38,0.61,4.64,1.8l3.48-3.48C18.02,3.6,15.22,2.7,12,2.7C7.74,2.7,4.02,6,2.43,9.12l3.48,3.48C6.95,9.5,9.85,7.2,12,7.2z"/></svg>
+                  Login with Google
+                </button>
+                <div style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-muted); word-break: break-all;">
+                  Using Client ID: <code style="color: #4285F4;">{{ publicConfig.GOOGLE_AUTH_CLIENT_ID }}</code>
+                </div>
+              </div>
+              <div v-else style="color: var(--text-muted); font-size: 0.9rem; text-align: center; border: 1px dashed rgba(255,255,255,0.1); padding: 1.5rem; border-radius: 6px;">
+                🔑 Google Auth is disabled (Client ID not loaded or mock-client-id-not-loaded).
+              </div>
+
+              <!-- Beta Feature Flag Toggle -->
+              <div v-slot:default v-if="publicConfig.FEATURE_BETA_ACCESS" class="beta-widget" style="padding: 1rem; border-radius: 6px; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.2); display: flex; align-items: center; gap: 0.75rem;">
+                <div style="background: var(--accent); color: black; font-size: 0.7rem; font-weight: bold; padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; line-height: 1.2;">Beta</div>
+                <div style="text-align: left;">
+                  <h5 style="color: var(--accent); font-size: 0.9rem; margin: 0 0 0.1rem 0;">Staging Environment Beta Access</h5>
+                  <p style="font-size: 0.8rem; margin: 0; color: var(--text-muted);">You have been granted access to advanced experimental developer tools.</p>
+                </div>
+              </div>
+              <div v-else style="color: var(--text-muted); font-size: 0.9rem; text-align: center; border: 1px dashed rgba(255,255,255,0.1); padding: 1.5rem; border-radius: 6px;">
+                🚀 Beta access features are locked (FEATURE_BETA_ACCESS = false).
+              </div>
+
+            </div>
+          </div>
+
+          <!-- RIGHT SIDE: API RESPONSE COMPARISON -->
+          <div class="demo-panel api-response">
+            <h4 style="margin-bottom: 1rem; color: var(--secondary); display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem;">
+              <Terminal size="18" /> Runtime Security Breakdown
+            </h4>
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+              
+              <!-- Public JSON Endpoint -->
+              <div>
+                <span style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 0.25rem; color: var(--text-muted); text-align: left;">
+                  🌐 Public API Response (<code>GET /api/config</code>):
+                </span>
+                <pre class="code-body" style="margin: 0; padding: 0.75rem; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.85rem; color: #34d399; text-align: left;">{{ JSON.stringify(publicConfig, null, 2) }}</pre>
+              </div>
+
+              <!-- Private Server Variables (Masked) -->
+              <div>
+                <span style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 0.25rem; color: #f87171; text-align: left;">
+                  🔒 Hidden Server Secrets (Never sent to client):
+                </span>
+                <div style="padding: 0.75rem; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.1); border-radius: 6px; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.35rem;">
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">GOOGLE_AUTH_CLIENT_SECRET:</span>
+                    <span class="code-font" style="color: #f87171; font-weight: bold;">gsec_********_dont_expose_********</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">API_SECRET_KEY:</span>
+                    <span class="code-font" style="color: #f87171; font-weight: bold;">sk_test_51N2x************************</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">DATABASE_URL:</span>
+                    <span class="code-font" style="color: #f87171; font-weight: bold;">postgresql://********:********@********...</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
 
       <!-- TAB 2: TECHNICAL GUIDE -->
@@ -517,6 +609,9 @@ const serverEnv = ref({
     DATABASE_URL: null,
     API_SECRET_KEY: null,
     APP_ENVIRONMENT: null,
+    GOOGLE_AUTH_CLIENT_ID: null,
+    GOOGLE_AUTH_CLIENT_SECRET: null,
+    FEATURE_BETA_ACCESS: null,
     SOPS_DECRYPT_STATUS: 'UNKNOWN',
     SOPS_DECRYPT_METHOD: 'None',
     SOPS_DECRYPT_ERROR: null
@@ -527,10 +622,22 @@ const serverEnv = ref({
   }
 });
 
+const publicConfig = ref({
+  GOOGLE_AUTH_CLIENT_ID: null,
+  FEATURE_BETA_ACCESS: false
+});
+
 // Computed properties
 const filteredEnv = computed(() => {
   const result = {};
-  const allowedKeys = ['DATABASE_URL', 'API_SECRET_KEY', 'APP_ENVIRONMENT'];
+  const allowedKeys = [
+    'DATABASE_URL',
+    'API_SECRET_KEY',
+    'APP_ENVIRONMENT',
+    'GOOGLE_AUTH_CLIENT_ID',
+    'GOOGLE_AUTH_CLIENT_SECRET',
+    'FEATURE_BETA_ACCESS'
+  ];
   allowedKeys.forEach(k => {
     result[k] = serverEnv.value.env[k];
   });
@@ -621,6 +728,18 @@ const saveSecretsToServer = async () => {
   }
 };
 
+const fetchPublicConfig = async () => {
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    if (res.ok) {
+      publicConfig.value = data;
+    }
+  } catch (err) {
+    console.error('Error fetching public config:', err);
+  }
+};
+
 const fetchServerEnv = async () => {
   loading.value.env = true;
   try {
@@ -629,6 +748,7 @@ const fetchServerEnv = async () => {
     if (res.ok) {
       serverEnv.value = data;
       await fetchBundleSim();
+      await fetchPublicConfig();
     }
   } catch (err) {
     console.error('Error fetching server env:', err);
