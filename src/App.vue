@@ -85,22 +85,11 @@
               <div class="code-container" style="margin-bottom: 1rem;">
                 <div class="code-header">
                   <span>staging.env</span>
-                  <button class="copy-btn" @click="copyText('staging.env', 'stagingEnv')" :class="{ copied: copyStatus.stagingEnv }">
+                  <button class="copy-btn" @click="copyText(serverEnv.files.plaintextEnvContent || stagingEnvTemplate, 'stagingEnv')" :class="{ copied: copyStatus.stagingEnv }">
                     <Copy size="14" /> {{ copyStatus.stagingEnv ? 'Copied!' : 'Copy' }}
                   </button>
                 </div>
-                <pre class="code-body" style="font-size: 0.8rem;"># Database Configuration
-DATABASE_URL=postgresql://sops_user:sops_super_secret_password_2026@localhost:5432/sops_db
-
-# Third-party integrations
-API_SECRET_KEY=sk_test_51N2xSOPSandAGEsecretKeyForVerification
-
-# Google OAuth Configuration
-VITE_GOOGLE_AUTH_CLIENT_ID=54321-google-oauth-client-id.apps.googleusercontent.com
-GOOGLE_AUTH_CLIENT_SECRET=gsec_staging_secret_key_dont_expose_998877
-
-# Feature Toggles
-VITE_FEATURE_BETA_ACCESS=true</pre>
+                <pre class="code-body" style="font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">{{ serverEnv.files.plaintextEnvContent || stagingEnvTemplate }}</pre>
               </div>
 
               <div class="status-indicator" style="padding: 1rem; border-radius: 6px; display: flex; align-items: center; gap: 0.75rem;" :style="(serverEnv.files.plaintextEnvStatus === 'Detected' || (serverEnv.isProduction && serverEnv.decryptStatus === 'SUCCESS')) ? 'background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2);' : 'background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2);'">
@@ -626,6 +615,19 @@ const copyStatus = ref({
   stagingEnv: false
 });
 
+const stagingEnvTemplate = `# Database Configuration
+DATABASE_URL=postgresql://sops_user:sops_super_secret_password_2026@localhost:5432/sops_db
+
+# Third-party integrations
+API_SECRET_KEY=sk_test_51N2xSOPSandAGEsecretKeyForVerification
+
+# Google OAuth Configuration
+VITE_GOOGLE_AUTH_CLIENT_ID=54321-google-oauth-client-id.apps.googleusercontent.com
+GOOGLE_AUTH_CLIENT_SECRET=gsec_staging_secret_key_dont_expose_998877
+
+# Feature Toggles
+VITE_FEATURE_BETA_ACCESS=true`;
+
 const serverEnv = ref({
   env: {
     DATABASE_URL: null,
@@ -642,6 +644,7 @@ const serverEnv = ref({
     keysTxtStatus: 'Missing',
     keysTxtPublicKey: 'None',
     plaintextEnvStatus: 'Missing',
+    plaintextEnvContent: null,
     envEnc: ''
   }
 });

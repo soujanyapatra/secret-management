@@ -243,9 +243,24 @@ app.get('/api/env', (req, res) => {
     encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
   }
   const plaintextEnvPath = path.join(__dirname, `${env}.env`);
+  const fallbackPlaintextEnvPath = path.join(__dirname, '.env');
+  let activePlaintextEnvPath = null;
   
-  if (fs.existsSync(plaintextEnvPath) || fs.existsSync(path.join(__dirname, '.env'))) {
+  if (fs.existsSync(plaintextEnvPath)) {
     plaintextEnvStatus = 'Detected';
+    activePlaintextEnvPath = plaintextEnvPath;
+  } else if (fs.existsSync(fallbackPlaintextEnvPath)) {
+    plaintextEnvStatus = 'Detected';
+    activePlaintextEnvPath = fallbackPlaintextEnvPath;
+  }
+  
+  let plaintextEnvContent = null;
+  if (activePlaintextEnvPath) {
+    try {
+      plaintextEnvContent = fs.readFileSync(activePlaintextEnvPath, 'utf8');
+    } catch (e) {
+      console.error('[SOPS] Failed to read plaintext environment file:', e.message);
+    }
   }
   
   if (fs.existsSync(keyPath)) {
@@ -276,6 +291,7 @@ app.get('/api/env', (req, res) => {
       keysTxtStatus,
       keysTxtPublicKey,
       plaintextEnvStatus,
+      plaintextEnvContent,
       envEnc: envEncContent
     }
   });
