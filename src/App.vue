@@ -744,13 +744,6 @@ const getStatusBadgeClass = (status) => {
   }
 };
 
-const copyText = (text, type) => {
-  navigator.clipboard.writeText(text);
-  copyStatus.value[type] = true;
-  setTimeout(() => {
-    copyStatus.value[type] = false;
-  }, 2000);
-};
 
 
 // Lifecycles
