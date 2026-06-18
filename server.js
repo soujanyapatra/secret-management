@@ -55,11 +55,16 @@ app.use(express.json());
 
 // Load SOPS secrets into environment variables
 function loadSopsSecrets() {
-  const encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
+  const env = process.env.APP_ENVIRONMENT || 'staging';
+  let encEnvPath = path.join(RUNTIME_DIR, `${env}.env.enc`);
   const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
   
+  if (!fs.existsSync(encEnvPath)) {
+    encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
+  }
+  
   if (fs.existsSync(encEnvPath)) {
-    console.log('[SOPS] Found .env.enc file.');
+    console.log(`[SOPS] Found encrypted secrets file at: ${encEnvPath}`);
     let ageKey = process.env.SOPS_AGE_KEY;
     
     if (!ageKey && fs.existsSync(keyPath)) {
@@ -112,7 +117,7 @@ function loadSopsSecrets() {
       process.env.SOPS_DECRYPT_METHOD = 'None';
     }
   } else {
-    console.log('[SOPS] No .env.enc file found. Skipping in-memory decryption.');
+    console.log(`[SOPS] No encrypted secrets file found at ${encEnvPath}. Skipping in-memory decryption.`);
     process.env.SOPS_DECRYPT_STATUS = 'NO_ENC_FILE';
     process.env.SOPS_DECRYPT_METHOD = 'None';
   }
@@ -120,11 +125,14 @@ function loadSopsSecrets() {
 
 // Bootstrap demo secrets if they don't exist
 function bootstrapDemo() {
-  const encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
+  const env = process.env.APP_ENVIRONMENT || 'staging';
+  const encEnvPath = path.join(RUNTIME_DIR, `${env}.env.enc`);
   const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
   
-  if (!fs.existsSync(encEnvPath) || !fs.existsSync(keyPath)) {
-    console.log('[SOPS] Bootstrapping demo secrets...');
+  const fallbackEncEnvPath = path.join(RUNTIME_DIR, '.env.enc');
+  
+  if (!fs.existsSync(encEnvPath) && !fs.existsSync(fallbackEncEnvPath) && !fs.existsSync(keyPath)) {
+    console.log(`[SOPS] Bootstrapping ${env} secrets...`);
     try {
       // 1. Generate key pair
       const keygenBin = getBinaryPath('age-keygen');
@@ -135,10 +143,14 @@ function bootstrapDemo() {
       fs.writeFileSync(keyPath, output, 'utf8');
       console.log('[SOPS] Saved generated private key to keys.txt');
       
-      // 3. Define sample secrets (Read from .env.template if exists, otherwise fallback)
+      // 3. Define sample secrets (Read from env-specific files or .env.template)
       let sampleSecrets = '';
+      const envTemplatePath = path.join(__dirname, `${env}.env`);
       const templatePath = path.join(__dirname, '.env.template');
-      if (fs.existsSync(templatePath)) {
+      
+      if (fs.existsSync(envTemplatePath)) {
+        sampleSecrets = fs.readFileSync(envTemplatePath, 'utf8');
+      } else if (fs.existsSync(templatePath)) {
         sampleSecrets = fs.readFileSync(templatePath, 'utf8');
       } else {
         sampleSecrets = `# Database Configuration
@@ -153,12 +165,12 @@ APP_ENVIRONMENT=development
       }
       
       // 4. Save to temp and encrypt
-      const tempFile = path.join(RUNTIME_DIR, 'temp_bootstrap.env');
+      const tempFile = path.join(RUNTIME_DIR, `temp_bootstrap_${env}.env`);
       fs.writeFileSync(tempFile, sampleSecrets, 'utf8');
       
       const sopsBin = getBinaryPath('sops');
       execSync(`"${sopsBin}" --encrypt --age "${publicKey}" --input-type dotenv --output-type dotenv "${tempFile}" > "${encEnvPath}"`);
-      console.log('[SOPS] Encrypted secrets and saved to .env.enc');
+      console.log(`[SOPS] Encrypted secrets and saved to ${env}.env.enc`);
       
       fs.unlinkSync(tempFile);
     } catch (err) {
@@ -175,10 +187,15 @@ loadSopsSecrets();
 
 // Get plaintext template configurations
 app.get('/api/env-template', (req, res) => {
+  const env = process.env.APP_ENVIRONMENT || 'staging';
+  const envTemplatePath = path.join(__dirname, `${env}.env`);
   const templatePath = path.join(__dirname, '.env.template');
-  if (fs.existsSync(templatePath)) {
+  
+  const chosenPath = fs.existsSync(envTemplatePath) ? envTemplatePath : templatePath;
+  
+  if (fs.existsSync(chosenPath)) {
     try {
-      const content = fs.readFileSync(templatePath, 'utf8');
+      const content = fs.readFileSync(chosenPath, 'utf8');
       return res.json({ template: content });
     } catch (e) {
       return res.status(500).json({ error: 'Failed to read template file: ' + e.message });
@@ -238,10 +255,14 @@ app.get('/api/env', (req, res) => {
   
   // Also read file contents to show in the UI for learning purposes
   let keysTxtContent = 'File keys.txt not found';
-  let envEncContent = 'File .env.enc not found';
+  let envEncContent = 'Encrypted secrets file not found';
   
+  const env = process.env.APP_ENVIRONMENT || 'staging';
   const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
-  const encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
+  let encEnvPath = path.join(RUNTIME_DIR, `${env}.env.enc`);
+  if (!fs.existsSync(encEnvPath)) {
+    encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
+  }
   
   if (fs.existsSync(keyPath)) {
     keysTxtContent = fs.readFileSync(keyPath, 'utf8');

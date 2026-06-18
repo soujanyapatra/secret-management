@@ -9,7 +9,7 @@ dist-ssr/
 *.local
 
 # Decrypted/Secrets files (Crucial for SOPS secret management)
-.env
+*.env
 keys.txt
 temp*.env*
 temp_key.txt

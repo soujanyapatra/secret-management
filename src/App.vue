@@ -178,7 +178,6 @@
               </div>
             </div>
           </section>
-
         </div>
 
         <!-- Right Column: Server Environment Monitor -->
