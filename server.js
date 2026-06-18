@@ -177,25 +177,6 @@ loadSopsSecrets();
 
 // API ROUTES
 
-// Get plaintext template configurations
-app.get('/api/env-template', (req, res) => {
-  const env = process.env.APP_ENVIRONMENT || 'staging';
-  const envTemplatePath = path.join(__dirname, `${env}.env`);
-  const templatePath = path.join(__dirname, '.env.template');
-  
-  const chosenPath = fs.existsSync(envTemplatePath) ? envTemplatePath : templatePath;
-  
-  if (fs.existsSync(chosenPath)) {
-    try {
-      const content = fs.readFileSync(chosenPath, 'utf8');
-      return res.json({ template: content });
-    } catch (e) {
-      return res.status(500).json({ error: 'Failed to read template file: ' + e.message });
-    }
-  }
-  
-  return res.status(404).json({ error: 'No configuration template file found on server filesystem' });
-});
 
 // Get safe, public configuration for the frontend
 app.get('/api/config', (req, res) => {
@@ -249,9 +230,11 @@ app.get('/api/env', (req, res) => {
     }
   });
   
-  // Also read file contents to show in the UI for learning purposes
-  let keysTxtContent = 'File keys.txt not found';
+  // Read file statuses and only safe content (no private keys) to show in the UI
+  let keysTxtStatus = 'Missing';
+  let keysTxtPublicKey = 'None';
   let envEncContent = 'Encrypted secrets file not found';
+  let plaintextEnvStatus = 'Missing';
   
   const env = process.env.APP_ENVIRONMENT || 'staging';
   const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
@@ -259,15 +242,25 @@ app.get('/api/env', (req, res) => {
   if (!fs.existsSync(encEnvPath)) {
     encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
   }
+  const plaintextEnvPath = path.join(__dirname, `${env}.env`);
   
-  if (isVercel || process.env.NODE_ENV === 'production') {
-    keysTxtContent = 'Disabled in production to prevent key leakage';
-  } else if (fs.existsSync(keyPath)) {
-    keysTxtContent = fs.readFileSync(keyPath, 'utf8');
-    // Security Best Practice: Mask the server's private key before sending it to the client.
-    // The private key must remain hidden on the server.
-    keysTxtContent = keysTxtContent.replace(/(AGE-SECRET-KEY-1)\w+/, '$1************************************************');
+  if (fs.existsSync(plaintextEnvPath) || fs.existsSync(path.join(__dirname, '.env'))) {
+    plaintextEnvStatus = 'Detected';
   }
+  
+  if (fs.existsSync(keyPath)) {
+    keysTxtStatus = 'Detected';
+    try {
+      const content = fs.readFileSync(keyPath, 'utf8');
+      const match = content.match(/# public key: (age1\w+)/);
+      if (match) {
+        keysTxtPublicKey = match[1];
+      }
+    } catch (e) {
+      console.error('[SOPS] Failed to read public key from keys.txt:', e.message);
+    }
+  }
+  
   if (fs.existsSync(encEnvPath)) {
     envEncContent = fs.readFileSync(encEnvPath, 'utf8');
   }
@@ -275,113 +268,27 @@ app.get('/api/env', (req, res) => {
   res.json({
     env: envData,
     files: {
-      keysTxt: keysTxtContent,
+      keysTxtStatus,
+      keysTxtPublicKey,
+      plaintextEnvStatus,
       envEnc: envEncContent
     }
   });
 });
 
-// Middleware to restrict playground actions in production to prevent key exposure over the network
-function restrictInProduction(req, res, next) {
-  if (isVercel || process.env.NODE_ENV === 'production') {
-    return res.status(403).json({
-      error: 'Playground execution endpoints are disabled in production for security. Private keys cannot be generated or transmitted over the network.'
-    });
-  }
-  next();
-}
-
-// Run age-keygen
-// ⚠️ WARNING: This endpoint is strictly for the interactive playground tutorial.
-// Generating private keys on demand and transmitting them to the client is insecure
-// and should never be done in a production application.
-app.post('/api/keygen', restrictInProduction, (req, res) => {
+// Reload environment secrets from local filesystem (No keys are sent over the network!)
+app.post('/api/reload-env', (req, res) => {
   try {
-    const keygenBin = getBinaryPath('age-keygen');
-    const output = execSync(`"${keygenBin}"`).toString();
-    const publicKeyMatch = output.match(/# public key: (age1\w+)/);
-    const privateKeyMatch = output.match(/(AGE-SECRET-KEY-1\w+)/);
-    
-    if (publicKeyMatch && privateKeyMatch) {
-      res.json({
-        publicKey: publicKeyMatch[1],
-        privateKey: privateKeyMatch[1],
-        raw: output
-      });
-    } else {
-      res.status(500).json({ error: 'Failed to parse keygen output' });
-    }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Encrypt secrets using a public key
-app.post('/api/encrypt', restrictInProduction, (req, res) => {
-  const { publicKey, secrets } = req.body;
-  if (!publicKey || !secrets) {
-    return res.status(400).json({ error: 'Missing publicKey or secrets' });
-  }
-  
-  const tempFile = path.join(RUNTIME_DIR, `temp_${Date.now()}.env`);
-  try {
-    fs.writeFileSync(tempFile, secrets);
-    const sopsBin = getBinaryPath('sops');
-    const encrypted = execSync(`"${sopsBin}" --encrypt --age "${publicKey}" --input-type dotenv --output-type dotenv "${tempFile}"`).toString();
-    res.json({ encrypted });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-  }
-});
-
-// Decrypt secrets using a private key
-app.post('/api/decrypt', restrictInProduction, (req, res) => {
-  const { privateKey, encryptedContent } = req.body;
-  if (!privateKey || !encryptedContent) {
-    return res.status(400).json({ error: 'Missing privateKey or encryptedContent' });
-  }
-  
-  const tempFile = path.join(RUNTIME_DIR, `temp_${Date.now()}.env.enc`);
-  try {
-    fs.writeFileSync(tempFile, encryptedContent);
-    const sopsBin = getBinaryPath('sops');
-    const decrypted = execSync(`"${sopsBin}" --decrypt --input-type dotenv --output-type dotenv "${tempFile}"`, {
-      env: { ...process.env, SOPS_AGE_KEY: privateKey }
-    }).toString();
-    res.json({ decrypted });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-  }
-});
-
-// Save current keys and encrypted env on the server and reload environment
-// ⚠️ WARNING: Allowing arbitrary users to upload private keys and encrypted configurations
-// via API endpoints is a massive remote-configuration vulnerability. This is only
-// implemented here for local tutorial/playground demonstration.
-app.post('/api/save-secrets', restrictInProduction, (req, res) => {
-  const { privateKeyRaw, encryptedContent } = req.body;
-  if (!privateKeyRaw || !encryptedContent) {
-    return res.status(400).json({ error: 'Missing privateKeyRaw or encryptedContent' });
-  }
-  
-  const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
-  const encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
-  
-  try {
-    fs.writeFileSync(keyPath, privateKeyRaw, 'utf8');
-    fs.writeFileSync(encEnvPath, encryptedContent, 'utf8');
-    
     // Clear old loaded secrets first
     delete process.env.DATABASE_URL;
     delete process.env.API_SECRET_KEY;
     delete process.env.APP_ENVIRONMENT;
-    delete process.env.SOPS_AGE_KEY; // clear if set
+    delete process.env.VITE_GOOGLE_AUTH_CLIENT_ID;
+    delete process.env.GOOGLE_AUTH_CLIENT_SECRET;
+    delete process.env.VITE_FEATURE_BETA_ACCESS;
+    delete process.env.SOPS_AGE_KEY;
     
-    // Reload secrets
+    // Reload secrets securely on server-side only
     loadSopsSecrets();
     
     res.json({ success: true, status: process.env.SOPS_DECRYPT_STATUS });
