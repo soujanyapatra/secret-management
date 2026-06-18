@@ -217,9 +217,7 @@
                 <pre>{{ serverEnv.env.SOPS_DECRYPT_ERROR }}</pre>
               </div>
             </div>
-
-
-
+            
             <!-- Loaded variables -->
             <div class="monitor-section">
               <h4>Loaded Env Variables (Masked)</h4>
