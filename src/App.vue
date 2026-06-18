@@ -308,7 +308,7 @@
         </div>
         <p class="section-desc">
           To illustrate how your frontend securely consumes environment configurations at runtime: below is a live simulation. 
-          The backend decrypts the secrets (like <code>GOOGLE_AUTH_CLIENT_ID</code> and <code>FEATURE_BETA_ACCESS</code>) from <code>.env.enc</code> (or <code>staging.env.enc</code>) and exposes <strong>only the public properties</strong> to the frontend via the <code>/api/config</code> API endpoint. The sensitive <strong>Client Secret</strong> and database password remain safely hidden on the server!
+          The backend decrypts the secrets (like <code>VITE_GOOGLE_AUTH_CLIENT_ID</code> and <code>VITE_FEATURE_BETA_ACCESS</code>) from <code>.env.enc</code> (or <code>staging.env.enc</code>) and exposes <strong>only the public properties</strong> to the frontend via the <code>/api/config</code> API endpoint. The sensitive <strong>Client Secret</strong> and database password remain safely hidden on the server!
         </p>
 
         <div class="demo-playground-grid" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 1.5rem; margin-top: 1.5rem;">
@@ -321,14 +321,14 @@
             <div class="fe-canvas" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; min-height: 200px; justify-content: center;">
               
               <!-- Client ID Integration -->
-              <div v-if="publicConfig.GOOGLE_AUTH_CLIENT_ID && publicConfig.GOOGLE_AUTH_CLIENT_ID !== 'mock-client-id-not-loaded'" class="google-auth-widget" style="padding: 1rem; border-radius: 6px; background: rgba(66, 133, 244, 0.1); border: 1px solid rgba(66, 133, 244, 0.2);">
+              <div v-if="publicConfig.VITE_GOOGLE_AUTH_CLIENT_ID && publicConfig.VITE_GOOGLE_AUTH_CLIENT_ID !== 'mock-client-id-not-loaded'" class="google-auth-widget" style="padding: 1rem; border-radius: 6px; background: rgba(66, 133, 244, 0.1); border: 1px solid rgba(66, 133, 244, 0.2);">
                 <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #4285F4; font-weight: bold; display: block; margin-bottom: 0.5rem;">Google Authentication Integration</span>
                 <button class="btn" style="background: #4285F4; color: white; display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; padding: 0.5rem 1rem; border-radius: 4px; border: none; cursor: pointer; font-weight: 500;">
                   <svg style="width:16px;height:16px" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12v2.7h5.38C17.1,14.93,15.89,16.5,13.85,17.58v2.28h3.9c2.28-2.1,3.6-5.2,3.6-8.76C21.35,11.1,21.35,11.1,21.35,11.1z M12,21.6c2.59,0,4.76-0.86,6.35-2.34l-3.9-2.28c-1.08,0.72-2.47,1.15-4.45,1.15c-3.42,0-6.32-2.3-7.36-5.4H2.43v2.38C4.02,18.3,7.74,21.6,12,21.6z M4.64,12.72c-0.27-0.81-0.42-1.68-0.42-2.58s0.15-1.77,0.42-2.58V5.18H2.43C1.65,6.73,1.2,8.47,1.2,10.3s0.45,3.57,1.23,5.12L4.64,12.72z M12,7.2c1.78,0,3.38,0.61,4.64,1.8l3.48-3.48C18.02,3.6,15.22,2.7,12,2.7C7.74,2.7,4.02,6,2.43,9.12l3.48,3.48C6.95,9.5,9.85,7.2,12,7.2z"/></svg>
                   Login with Google
                 </button>
                 <div style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-muted); word-break: break-all;">
-                  Using Client ID: <code style="color: #4285F4;">{{ publicConfig.GOOGLE_AUTH_CLIENT_ID }}</code>
+                  Using Client ID: <code style="color: #4285F4;">{{ publicConfig.VITE_GOOGLE_AUTH_CLIENT_ID }}</code>
                 </div>
               </div>
               <div v-else style="color: var(--text-muted); font-size: 0.9rem; text-align: center; border: 1px dashed rgba(255,255,255,0.1); padding: 1.5rem; border-radius: 6px;">
@@ -336,7 +336,7 @@
               </div>
 
               <!-- Beta Feature Flag Toggle -->
-              <div v-slot:default v-if="publicConfig.FEATURE_BETA_ACCESS" class="beta-widget" style="padding: 1rem; border-radius: 6px; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.2); display: flex; align-items: center; gap: 0.75rem;">
+              <div v-slot:default v-if="publicConfig.VITE_FEATURE_BETA_ACCESS" class="beta-widget" style="padding: 1rem; border-radius: 6px; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.2); display: flex; align-items: center; gap: 0.75rem;">
                 <div style="background: var(--accent); color: black; font-size: 0.7rem; font-weight: bold; padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; line-height: 1.2;">Beta</div>
                 <div style="text-align: left;">
                   <h5 style="color: var(--accent); font-size: 0.9rem; margin: 0 0 0.1rem 0;">Staging Environment Beta Access</h5>
@@ -344,7 +344,7 @@
                 </div>
               </div>
               <div v-else style="color: var(--text-muted); font-size: 0.9rem; text-align: center; border: 1px dashed rgba(255,255,255,0.1); padding: 1.5rem; border-radius: 6px;">
-                🚀 Beta access features are locked (FEATURE_BETA_ACCESS = false).
+                🚀 Beta access features are locked (VITE_FEATURE_BETA_ACCESS = false).
               </div>
 
             </div>
@@ -609,9 +609,9 @@ const serverEnv = ref({
     DATABASE_URL: null,
     API_SECRET_KEY: null,
     APP_ENVIRONMENT: null,
-    GOOGLE_AUTH_CLIENT_ID: null,
+    VITE_GOOGLE_AUTH_CLIENT_ID: null,
     GOOGLE_AUTH_CLIENT_SECRET: null,
-    FEATURE_BETA_ACCESS: null,
+    VITE_FEATURE_BETA_ACCESS: null,
     SOPS_DECRYPT_STATUS: 'UNKNOWN',
     SOPS_DECRYPT_METHOD: 'None',
     SOPS_DECRYPT_ERROR: null
@@ -623,8 +623,8 @@ const serverEnv = ref({
 });
 
 const publicConfig = ref({
-  GOOGLE_AUTH_CLIENT_ID: null,
-  FEATURE_BETA_ACCESS: false
+  VITE_GOOGLE_AUTH_CLIENT_ID: null,
+  VITE_FEATURE_BETA_ACCESS: false
 });
 
 // Computed properties
@@ -634,9 +634,9 @@ const filteredEnv = computed(() => {
     'DATABASE_URL',
     'API_SECRET_KEY',
     'APP_ENVIRONMENT',
-    'GOOGLE_AUTH_CLIENT_ID',
+    'VITE_GOOGLE_AUTH_CLIENT_ID',
     'GOOGLE_AUTH_CLIENT_SECRET',
-    'FEATURE_BETA_ACCESS'
+    'VITE_FEATURE_BETA_ACCESS'
   ];
   allowedKeys.forEach(k => {
     result[k] = serverEnv.value.env[k];

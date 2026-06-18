@@ -153,15 +153,7 @@ function bootstrapDemo() {
       } else if (fs.existsSync(templatePath)) {
         sampleSecrets = fs.readFileSync(templatePath, 'utf8');
       } else {
-        sampleSecrets = `# Database Configuration
-DATABASE_URL=postgresql://db_user:db_secure_password_placeholder@localhost:5432/db_name
-
-# Third-party integrations
-API_SECRET_KEY=sk_test_placeholderSecretKeyForVerificationOnly
-
-# Application Mode
-APP_ENVIRONMENT=development
-`;
+        throw new Error('No configuration template file (.env.template or staging.env) found to bootstrap from');
       }
       
       // 4. Save to temp and encrypt
@@ -201,16 +193,15 @@ app.get('/api/env-template', (req, res) => {
       return res.status(500).json({ error: 'Failed to read template file: ' + e.message });
     }
   }
+  
+  return res.status(404).json({ error: 'No configuration template file found on server filesystem' });
+});
+
+// Get safe, public configuration for the frontend
+app.get('/api/config', (req, res) => {
   res.json({
-    template: `# Database Configuration
-DATABASE_URL=postgresql://db_user:db_secure_password_placeholder@localhost:5432/db_name
-
-# Third-party integrations
-API_SECRET_KEY=sk_test_placeholderSecretKeyForVerificationOnly
-
-# Application Mode
-APP_ENVIRONMENT=development
-`
+    VITE_GOOGLE_AUTH_CLIENT_ID: process.env.VITE_GOOGLE_AUTH_CLIENT_ID || 'mock-client-id-not-loaded',
+    VITE_FEATURE_BETA_ACCESS: process.env.VITE_FEATURE_BETA_ACCESS === 'true' || process.env.VITE_FEATURE_BETA_ACCESS === true
   });
 });
 
@@ -220,6 +211,9 @@ app.get('/api/env', (req, res) => {
     'DATABASE_URL',
     'API_SECRET_KEY',
     'APP_ENVIRONMENT',
+    'VITE_GOOGLE_AUTH_CLIENT_ID',
+    'GOOGLE_AUTH_CLIENT_SECRET',
+    'VITE_FEATURE_BETA_ACCESS',
     'SOPS_DECRYPT_STATUS',
     'SOPS_DECRYPT_METHOD',
     'SOPS_DECRYPT_ERROR'
@@ -245,6 +239,8 @@ app.get('/api/env', (req, res) => {
         } else {
           envData[key] = '************************';
         }
+      } else if (key === 'GOOGLE_AUTH_CLIENT_SECRET') {
+        envData[key] = 'gsec_********_dont_expose_********';
       } else {
         envData[key] = value;
       }
