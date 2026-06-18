@@ -99,13 +99,13 @@ function bootstrapDemo() {
         sampleSecrets = fs.readFileSync(templatePath, 'utf8');
       } else {
         sampleSecrets = `# Database Configuration
-DATABASE_URL=postgresql://sops_user:sops_super_secret_password_2026@localhost:5432/sops_db
+DATABASE_URL=postgresql://db_user:db_secure_password_placeholder@localhost:5432/db_name
 
 # Third-party integrations
-API_SECRET_KEY=sk_test_51N2xSOPSandAGEsecretKeyForVerification
+API_SECRET_KEY=sk_test_placeholderSecretKeyForVerificationOnly
 
 # Application Mode
-APP_ENVIRONMENT=production
+APP_ENVIRONMENT=development
 `;
       }
       
@@ -142,13 +142,13 @@ app.get('/api/env-template', (req, res) => {
   }
   res.json({
     template: `# Database Configuration
-DATABASE_URL=postgresql://sops_user:sops_super_secret_password_2026@localhost:5432/sops_db
+DATABASE_URL=postgresql://db_user:db_secure_password_placeholder@localhost:5432/db_name
 
 # Third-party integrations
-API_SECRET_KEY=sk_test_51N2xSOPSandAGEsecretKeyForVerification
+API_SECRET_KEY=sk_test_placeholderSecretKeyForVerificationOnly
 
 # Application Mode
-APP_ENVIRONMENT=production
+APP_ENVIRONMENT=development
 `
   });
 });
@@ -168,12 +168,21 @@ app.get('/api/env', (req, res) => {
   keysToShow.forEach(key => {
     const value = process.env[key];
     if (value !== undefined) {
-      // Mask sensitive values
-      if (key === 'DATABASE_URL' || key === 'API_SECRET_KEY') {
-        if (value.length > 15) {
-          envData[key] = value.substring(0, 8) + '...' + value.substring(value.length - 6);
+      // Mask sensitive values securely to prevent leakage of credentials or keys
+      if (key === 'DATABASE_URL') {
+        try {
+          const url = new URL(value);
+          // Mask user and password, keep protocol and DB name
+          envData[key] = `${url.protocol}//********:********@********${url.pathname}`;
+        } catch (e) {
+          envData[key] = 'postgresql://********:********@********:********/********';
+        }
+      } else if (key === 'API_SECRET_KEY') {
+        const prefixMatch = value.match(/^(sk_[a-zA-Z0-9]+_)/);
+        if (prefixMatch) {
+          envData[key] = prefixMatch[1] + '************************';
         } else {
-          envData[key] = '********';
+          envData[key] = '************************';
         }
       } else {
         envData[key] = value;
@@ -192,6 +201,9 @@ app.get('/api/env', (req, res) => {
   
   if (fs.existsSync(keyPath)) {
     keysTxtContent = fs.readFileSync(keyPath, 'utf8');
+    // Security Best Practice: Mask the server's private key before sending it to the client.
+    // The private key must remain hidden on the server.
+    keysTxtContent = keysTxtContent.replace(/(AGE-SECRET-KEY-1)\w+/, '$1************************************************');
   }
   if (fs.existsSync(encEnvPath)) {
     envEncContent = fs.readFileSync(encEnvPath, 'utf8');
@@ -207,6 +219,9 @@ app.get('/api/env', (req, res) => {
 });
 
 // Run age-keygen
+// ⚠️ WARNING: This endpoint is strictly for the interactive playground tutorial.
+// Generating private keys on demand and transmitting them to the client is insecure
+// and should never be done in a production application.
 app.post('/api/keygen', (req, res) => {
   try {
     const output = execSync('./bin/age-keygen').toString();
@@ -268,6 +283,9 @@ app.post('/api/decrypt', (req, res) => {
 });
 
 // Save current keys and encrypted env on the server and reload environment
+// ⚠️ WARNING: Allowing arbitrary users to upload private keys and encrypted configurations
+// via API endpoints is a massive remote-configuration vulnerability. This is only
+// implemented here for local tutorial/playground demonstration.
 app.post('/api/save-secrets', (req, res) => {
   const { privateKeyRaw, encryptedContent } = req.body;
   if (!privateKeyRaw || !encryptedContent) {
