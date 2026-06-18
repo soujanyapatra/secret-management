@@ -8,14 +8,55 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const isVercel = !!(process.env.VERCEL || process.env.NOW_BUILD_TRIGGER);
+const RUNTIME_DIR = isVercel ? '/tmp' : __dirname;
+
+// Prepare binaries in /tmp for Serverless environments (like Vercel)
+function prepareBinaries() {
+  if (!isVercel) return;
+  const binDir = path.join(__dirname, 'bin');
+  const tmpBinDir = path.join('/tmp', 'bin');
+  
+  if (!fs.existsSync(tmpBinDir)) {
+    fs.mkdirSync(tmpBinDir, { recursive: true });
+  }
+  
+  const binaries = ['age', 'age-keygen', 'sops'];
+  binaries.forEach(bin => {
+    const srcPath = path.join(binDir, bin);
+    const destPath = path.join(tmpBinDir, bin);
+    
+    if (fs.existsSync(srcPath)) {
+      try {
+        if (!fs.existsSync(destPath)) {
+          fs.copyFileSync(srcPath, destPath);
+        }
+        fs.chmodSync(destPath, '755');
+      } catch (err) {
+        console.error(`[SOPS] Failed to prepare binary ${bin}:`, err.message);
+      }
+    }
+  });
+}
+
+function getBinaryPath(name) {
+  if (isVercel) {
+    return path.join('/tmp', 'bin', name);
+  }
+  return `./bin/${name}`;
+}
+
+// Prepare binaries if running in serverless Vercel environment
+prepareBinaries();
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // Load SOPS secrets into environment variables
 function loadSopsSecrets() {
-  const encEnvPath = path.join(__dirname, '.env.enc');
-  const keyPath = path.join(__dirname, 'keys.txt');
+  const encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
+  const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
   
   if (fs.existsSync(encEnvPath)) {
     console.log('[SOPS] Found .env.enc file.');
@@ -37,7 +78,8 @@ function loadSopsSecrets() {
     if (ageKey) {
       try {
         console.log('[SOPS] Decrypting secrets in-memory...');
-        const decrypted = execSync(`./bin/sops --decrypt --input-type dotenv --output-type dotenv "${encEnvPath}"`, {
+        const sopsBin = getBinaryPath('sops');
+        const decrypted = execSync(`"${sopsBin}" --decrypt --input-type dotenv --output-type dotenv "${encEnvPath}"`, {
           env: { ...process.env, SOPS_AGE_KEY: ageKey }
         }).toString();
         
@@ -78,14 +120,15 @@ function loadSopsSecrets() {
 
 // Bootstrap demo secrets if they don't exist
 function bootstrapDemo() {
-  const encEnvPath = path.join(__dirname, '.env.enc');
-  const keyPath = path.join(__dirname, 'keys.txt');
+  const encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
+  const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
   
   if (!fs.existsSync(encEnvPath) || !fs.existsSync(keyPath)) {
     console.log('[SOPS] Bootstrapping demo secrets...');
     try {
       // 1. Generate key pair
-      const output = execSync('./bin/age-keygen').toString();
+      const keygenBin = getBinaryPath('age-keygen');
+      const output = execSync(`"${keygenBin}"`).toString();
       const publicKey = output.match(/# public key: (age1\w+)/)[1];
       
       // 2. Save private key
@@ -110,10 +153,11 @@ APP_ENVIRONMENT=development
       }
       
       // 4. Save to temp and encrypt
-      const tempFile = path.join(__dirname, 'temp_bootstrap.env');
+      const tempFile = path.join(RUNTIME_DIR, 'temp_bootstrap.env');
       fs.writeFileSync(tempFile, sampleSecrets, 'utf8');
       
-      execSync(`./bin/sops --encrypt --age "${publicKey}" --input-type dotenv --output-type dotenv "${tempFile}" > "${encEnvPath}"`);
+      const sopsBin = getBinaryPath('sops');
+      execSync(`"${sopsBin}" --encrypt --age "${publicKey}" --input-type dotenv --output-type dotenv "${tempFile}" > "${encEnvPath}"`);
       console.log('[SOPS] Encrypted secrets and saved to .env.enc');
       
       fs.unlinkSync(tempFile);
@@ -196,8 +240,8 @@ app.get('/api/env', (req, res) => {
   let keysTxtContent = 'File keys.txt not found';
   let envEncContent = 'File .env.enc not found';
   
-  const keyPath = path.join(__dirname, 'keys.txt');
-  const encEnvPath = path.join(__dirname, '.env.enc');
+  const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
+  const encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
   
   if (fs.existsSync(keyPath)) {
     keysTxtContent = fs.readFileSync(keyPath, 'utf8');
@@ -224,7 +268,8 @@ app.get('/api/env', (req, res) => {
 // and should never be done in a production application.
 app.post('/api/keygen', (req, res) => {
   try {
-    const output = execSync('./bin/age-keygen').toString();
+    const keygenBin = getBinaryPath('age-keygen');
+    const output = execSync(`"${keygenBin}"`).toString();
     const publicKeyMatch = output.match(/# public key: (age1\w+)/);
     const privateKeyMatch = output.match(/(AGE-SECRET-KEY-1\w+)/);
     
@@ -249,10 +294,11 @@ app.post('/api/encrypt', (req, res) => {
     return res.status(400).json({ error: 'Missing publicKey or secrets' });
   }
   
-  const tempFile = path.join(__dirname, `temp_${Date.now()}.env`);
+  const tempFile = path.join(RUNTIME_DIR, `temp_${Date.now()}.env`);
   try {
     fs.writeFileSync(tempFile, secrets);
-    const encrypted = execSync(`./bin/sops --encrypt --age "${publicKey}" --input-type dotenv --output-type dotenv "${tempFile}"`).toString();
+    const sopsBin = getBinaryPath('sops');
+    const encrypted = execSync(`"${sopsBin}" --encrypt --age "${publicKey}" --input-type dotenv --output-type dotenv "${tempFile}"`).toString();
     res.json({ encrypted });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -268,10 +314,11 @@ app.post('/api/decrypt', (req, res) => {
     return res.status(400).json({ error: 'Missing privateKey or encryptedContent' });
   }
   
-  const tempFile = path.join(__dirname, `temp_${Date.now()}.env.enc`);
+  const tempFile = path.join(RUNTIME_DIR, `temp_${Date.now()}.env.enc`);
   try {
     fs.writeFileSync(tempFile, encryptedContent);
-    const decrypted = execSync(`./bin/sops --decrypt --input-type dotenv --output-type dotenv "${tempFile}"`, {
+    const sopsBin = getBinaryPath('sops');
+    const decrypted = execSync(`"${sopsBin}" --decrypt --input-type dotenv --output-type dotenv "${tempFile}"`, {
       env: { ...process.env, SOPS_AGE_KEY: privateKey }
     }).toString();
     res.json({ decrypted });
@@ -292,8 +339,8 @@ app.post('/api/save-secrets', (req, res) => {
     return res.status(400).json({ error: 'Missing privateKeyRaw or encryptedContent' });
   }
   
-  const keyPath = path.join(__dirname, 'keys.txt');
-  const encEnvPath = path.join(__dirname, '.env.enc');
+  const keyPath = path.join(RUNTIME_DIR, 'keys.txt');
+  const encEnvPath = path.join(RUNTIME_DIR, '.env.enc');
   
   try {
     fs.writeFileSync(keyPath, privateKeyRaw, 'utf8');
@@ -366,7 +413,11 @@ app.get('*', (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`[Server] Monolith backend running on http://localhost:${PORT}`);
-});
+if (!isVercel) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`[Server] Monolith backend running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
