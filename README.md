@@ -1,98 +1,101 @@
-# Secure Secret Management with Mozilla SOPS and AGE
+# 🔐 Secret Management with Mozilla SOPS and AGE
 
 This repository is a monolithic educational web application built with **Vue 3 (Vite)** and **Node.js (Express)** to demonstrate the industry best practice of managing secure application secrets using **Mozilla SOPS** and **AGE (Actually Good Encryption)**.
 
-The project features an interactive, step-by-step cryptographic playground and a comprehensive technical guide explaining how to integrate this workflow in development and CI/CD pipelines.
+The end goal of this project is to showcase how to protect sensitive credentials (like database passwords and Stripe API keys) while still allowing the frontend to dynamically access public configurations (like client IDs and feature flags) without exposing secrets to the browser.
 
 ---
 
-## ⚠️ The Vulnerability: Client-Side Environment Variables
+## 🎯 The End Goal: Secure Environment Separation
 
-A common security vulnerability in Single Page Applications (SPAs) deployed on hosting providers like Vercel is referencing environment variables (often prefixed with `VITE_` or similar prefixes) directly in frontend code. 
+In modern web development, applications require both **public** configurations (for the frontend/UI) and **private** secrets (for the backend server).
 
-**Vite compiles these variables directly into the compiled public JavaScript assets (`dist/assets/index.js`).** Anyone inspecting the client bundle or network requests can easily extract your secrets (like Stripe API keys, database connection strings, etc.).
+| Config Type | Examples | Exposing to Frontend? | Prefix Requirement |
+| :--- | :--- | :--- | :--- |
+| **Public Config** | `VITE_GOOGLE_AUTH_CLIENT_ID`, `VITE_FEATURE_BETA_ACCESS` | **Yes** (Safe to expose) | Must start with `VITE_` |
+| **Private Secrets** | `DATABASE_URL`, `API_SECRET_KEY`, `GOOGLE_AUTH_CLIENT_SECRET` | **NO!** (Must remain hidden) | Must NOT start with `VITE_` |
 
-This monolith demonstrates:
-1. **The Vulnerable Approach:** Plaintext variables compiled and hardcoded in the frontend build.
-2. **The Secure Approach (SOPS + AGE):** Secrets remain encrypted in git as `.env.enc`, and decrypted *in-memory* only on the secure Node.js backend. The client code never sees the secrets.
-
----
-
-## Features
-
-1. **Interactive SOPS + AGE Playground:**
-   - **Key Generation:** Generate AGE key pairs dynamically.
-   - **Secret Definition:** Define standard plaintext `.env` configurations.
-   - **SOPS Encryption:** Encrypt environment secrets on-the-fly and inspect the structure of the resulting `.env.enc` file.
-   - **In-Memory Decryption:** Apply the key and encrypted file to the backend process to demonstrate runtime decryption without writing plaintext files to disk.
-2. **Client-Side Secrets Exposure Demo:** Live side-by-side inspection showing exactly how plaintext variables get baked into client JS assets vs. how SOPS + AGE keeps assets clean and secure.
-3. **Backend Environment Monitor:** View a live reflection of the Node.js server environment state, including active (masked) environment variables and simulated server filesystem states.
-4. **Comprehensive Documentation:** A step-by-step guide explaining setup, commands, Git best practices, and integration workflows.
+This repository solves two major security problems:
+1. **Avoiding Hardcoded Secrets in Git:** All secrets are encrypted in the repository using SOPS, so you can safely commit your `.enc` environment files to Git.
+2. **Avoiding Secrets in the Client Bundle:** Vite compiles any `VITE_` prefixed variable into the frontend build. Private secrets are kept behind server-side APIs, ensuring they never leak into public JavaScript files or the browser console.
 
 ---
 
-## Tech Stack
+## 🔄 The Step-by-Step Workflow
 
-- **Frontend:** Vue 3 (Composition API), Vite, Vanilla CSS.
-- **Backend:** Node.js, Express, Child Process Executions (for SOPS/AGE CLI actions).
-- **Security Tools:** Mozilla SOPS, AGE, `age-keygen`.
+Here is how the secret management system functions in development and production:
+
+### 1. Local Plaintext Development
+Each developer has a local plaintext file (e.g. `staging.env` or `.env`) containing the configuration in human-readable text:
+```dotenv
+DATABASE_URL=postgresql://sops_user:sops_super_secret_password_2026@localhost:5432/sops_db
+API_SECRET_KEY=sk_test_51N2xSOPSandAGEsecretKeyForVerification
+VITE_GOOGLE_AUTH_CLIENT_ID=54321-google-oauth-client-id.apps.googleusercontent.com
+VITE_FEATURE_BETA_ACCESS=true
+```
+> [!IMPORTANT]
+> To prevent these plaintext credentials from being committed to Git, `.gitignore` is configured to ignore all plaintext environment files via the `*.env` rule.
+
+### 2. Encrypting for Git (SOPS + AGE)
+Before pushing to Git, the developer encrypts the file into an encrypted copy (e.g. `staging.env.enc` or `.env.enc`) using the public key of the project:
+```bash
+sops --encrypt --age <public_key> staging.env > staging.env.enc
+```
+The resulting `staging.env.enc` contains only encrypted payloads:
+```dotenv
+DATABASE_URL=ENC[AES256_GCM,data:pyvUoVHDiII6Y...iv:...,tag:...]
+VITE_GOOGLE_AUTH_CLIENT_ID=ENC[AES256_GCM,data:...iv:...,tag:...]
+```
+Because the values are encrypted, **it is 100% safe to commit `staging.env.enc` to Git.**
+
+### 3. Decrypting at Runtime (No Hardcoded Server Keys)
+When the application runs, it needs to decrypt the `.env.enc` file. The server loads the decryption key dynamically based on the environment:
+
+#### 💻 In Local Development
+* **Decryption Key location:** Placed in a local `keys.txt` file (which is gitignored).
+* **Server Action:** The Node.js backend detects the local `keys.txt` file, reads the key, decrypts the environment variables in-memory, and injects them into `process.env`.
+
+#### ☁️ In Production (Vercel)
+* **Decryption Key location:** Saved as a secure environment variable named `SOPS_AGE_KEY` in the Vercel hosting dashboard. No physical key file is uploaded.
+* **Server Action:** The serverless function reads `process.env.SOPS_AGE_KEY` directly from the hosting environment's memory and decrypts `.env.enc` in-memory.
 
 ---
 
-## Installation & Running
+## 🔒 Securing the Frontend (The Vite Loophole)
 
-This project runs as a single monolith. You can start both the frontend development server and backend API server with **one single command**.
+When Vite compiles the application for production:
+* Vite scans the code for `import.meta.env.VITE_*` references.
+* It bakes the values of those environment variables **directly into the compiled static JS files**.
+* Since `DATABASE_URL` and `API_SECRET_KEY` **do not** start with `VITE_`, Vite completely ignores them. They are never compiled into the client-side JavaScript.
 
-### Prerequisites
-- Node.js (v18 or higher)
-- npm
-
-### Quick Start
-
-1. Install npm dependencies:
-   ```bash
-   npm install
+### The Runtime Client API Flow:
+1. The frontend boots up in the user's browser.
+2. The frontend makes a request to `GET /api/config`.
+3. The backend server returns **only the safe, public configuration**:
+   ```json
+   {
+     "VITE_GOOGLE_AUTH_CLIENT_ID": "54321-google-oauth-client-id.apps.googleusercontent.com",
+     "VITE_FEATURE_BETA_ACCESS": true
+   }
    ```
-
-2. Start the development server (runs backend on port `3000` and frontend on port `5174` concurrently):
-   ```bash
-   npm run dev
-   ```
-
-3. Open your browser and navigate to:
-   - **Frontend:** [http://localhost:5174](http://localhost:5174)
-   - **Backend API:** [http://localhost:3000](http://localhost:3000)
-
-### Production Build & Launch
-
-To test the project in a compiled production state (where Express serves the static Vue production bundle):
-
-1. Build the Vue application:
-   ```bash
-   npm run build
-   ```
-
-2. Start the monolithic Express server:
-   ```bash
-   npm start
-   ```
-
-3. Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
+4. The sensitive `API_SECRET_KEY` and database credentials remain strictly in the backend server's memory, completely hidden from the browser.
 
 ---
 
-## Repository Structure
+## 🛠️ CLI Cheat Sheet
 
-- `bin/` - Precompiled `sops` and `age` binaries for Linux x86_64.
-- `src/` - Vue 3 frontend components and styling.
-- `server.js` - Express backend API & static asset server.
-- `keys.txt` - (*Auto-generated / Ignored*) AGE private key storage on the server.
-- `.env.enc` - (*Auto-generated*) SOPS encrypted environment secrets file.
-- `.env.template` - Plaintext environment configuration template used for local development and bootstrapping.
-- `package.json` - Single manager for dependencies, build, and dev scripts.
+### Generate a new AGE Key Pair
+```bash
+age-keygen -o keys.txt
+```
+This generates a private key in `keys.txt` and prints the public key in a comment.
 
----
+### Encrypt a Plaintext Environment File
+```bash
+sops --encrypt --age <public_key> staging.env > staging.env.enc
+```
 
-## License
-
-This project is open-source and available under the [MIT License](LICENSE).
+### Decrypt an Encrypted Environment File (Local Inspection)
+```bash
+SOPS_AGE_KEY_FILE=keys.txt sops --decrypt staging.env.enc
+```
