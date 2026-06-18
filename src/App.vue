@@ -165,7 +165,10 @@
                   <div>
                     <strong>Status: {{ serverLoadStatus }}</strong>
                     <p v-if="serverLoadStatus === 'SUCCESS'">
-                      The backend successfully decrypted the <code>.env.enc</code> file using the AGE private key in <code>keys.txt</code> and loaded variables into memory!
+                      The backend successfully decrypted the <code>.env.enc</code> file and loaded variables into memory!
+                    </p>
+                    <p v-if="serverLoadStatus === 'SUCCESS'" class="step-desc" style="margin-top: 0.5rem; font-size: 0.85rem; line-height: 1.4;">
+                      💡 <strong>Production Best Practice:</strong> We simulated this locally by writing the key to <code>keys.txt</code>. However, because <code>keys.txt</code> is listed in your <code>.gitignore</code>, it is never committed. In production (like on Vercel), you must copy the private key and add it to your hosting dashboard's Environment Variables as <code>SOPS_AGE_KEY</code> instead of deploying a key file.
                     </p>
                     <p v-else>
                       Decryption failed. Please check the logs in the Server Environment panel.
